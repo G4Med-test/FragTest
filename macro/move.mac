@@ -1,0 +1,49 @@
+/control/verbose 2
+/control/execute physics.mac
+/vis/open OGLIX  800x800-0+0
+/vis/drawVolume
+/vis/viewer/reset
+#/vis/viewer/set/style surface
+
+# Disable auto refresh and quieten vis messages whilst scene and
+# trajectories are established:90
+ /vis/viewer/set/autoRefresh false
+ /vis/verbose errors
+ 
+ /vis/viewer/set/viewpointThetaPhi  45 45
+#/vis/viewer/set/viewpointThetaPhi  0 0
+#/vis/viewer/set/viewpointThetaPhi  90 89.999
+#/vis/viewer/panTo .003 .15
+#/vis/viewer/panTo 0 .01
+#/vis/viewer/panTo 0 -5.
+#/vis/viewer/zoom 0.1
+ /vis/drawVolume 
+# /vis/scene/add/axes 0 0 0 28 mm
+ /vis/scene/add/eventID
+ /vis/scene/add/trajectories rich
+ 
+ # Set up drawByCharge with time slicing
+ /vis/modeling/trajectories/create/drawByCharge TimeSliceByCharge
+ /vis/modeling/trajectories/TimeSliceByCharge/default/setDrawStepPts true
+ /vis/modeling/trajectories/TimeSliceByCharge/default/setStepPtsSize 5
+ /vis/modeling/trajectories/TimeSliceByCharge/default/setDrawAuxPts true
+ /vis/modeling/trajectories/TimeSliceByCharge/default/setAuxPtsSize 5
+ /vis/modeling/trajectories/TimeSliceByCharge/default/setTimeSliceInterval 0.001 ns
+ /vis/modeling/trajectories/list
+
+ #/vis/scene/add/trajectories rich smooth
+ 
+ # Re-establish auto refreshing and verbosity:
+ /vis/viewer/set/autoRefresh true
+ /vis/verbose warnings
+ 
+
+ /run/beamOn 1
+ 
+ # Configure OpenGL for display-by-time
+ /vis/ogl/set/fade 1
+ /vis/ogl/set/displayHeadTime true
+ /control/alias timeRange 0.1
+ 
+
+ 

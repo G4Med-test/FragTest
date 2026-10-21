@@ -1,3 +1,5 @@
 {
-  "macros": ["example.mac"]
+  "macros": [
+    "QGSP_BIC_EMY_400MeV.mac"
+  ]
 }

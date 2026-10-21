@@ -1,0 +1,5 @@
+# Define the physics models
+/physics/addPhysics QGSP_BIC_EMY
+#/physics/addPhysics QMD
+#/physics/addPhysics INCL
+/run/initialize
