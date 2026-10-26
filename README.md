@@ -13,6 +13,9 @@ yield/charge distribution is scored at several water depths (59-347 mm,
 spanning the Bragg peak region) and compared across hadronic physics models
 (`FragTestExp.py` holds the experimental reference data).
 
+Histograms are written to `output.root` with Geant4's own analysis manager:
+no ROOT installation is needed to build or run the test.
+
 ## 📚 Reference
 
 - Source: `geant-validation-tests/src/FragTest`.

@@ -1,5 +1,5 @@
 #ifndef ANALYSISMANAGER_HH
-#define ANALYSISMANAGER_HH 
+#define ANALYSISMANAGER_HH
 
 #include "globals.hh"
 
@@ -8,17 +8,17 @@
 
 using namespace std;
 
-class TFile;
-class TNtuple;
-class TH1D;
-
-class AnalysisManager { 
+// Thin wrapper around G4AnalysisManager: histograms are written to
+// output.root by Geant4's own ROOT writer, no ROOT installation needed.
+class AnalysisManager {
 
 public:
-  
+
   ~AnalysisManager();
   static AnalysisManager* getInstance();
- 
+
+  // Book the histograms for the given phantom thickness (one of the
+  // experimental depths in Binning.hh) and open output.root
   void RegisterOutputFile(G4double thick);
 
   void FillAngle(G4double Z, G4double thetaDeg);
@@ -35,25 +35,20 @@ private:
   AnalysisManager();
 
   G4double pThickness;
+  G4bool booked;
 
-  TFile* outputFile;	
-  TNtuple *fragNtuple, *fragNtupleA, *fragNtupleE;
-
-  //-----1D Histograms--------------------------------
-  TH1D* fFragmZ;
-  TH1D* fBraggTot;
+  //-----1D Histograms (G4AnalysisManager ids)--------
+  G4int fFragmZ;
+  G4int fBraggTot;
 
   //-----Binning for 1D histograms--------------------
   std::pair<G4double, G4double> getEnergyBin(G4double energy, const std::vector<G4double>& energies);
 
-  std::map<G4double, TH1D*> mapAngle; // Z
-  std::map<G4double, std::map<G4double, TH1D*>> mapEnergy; // Z, thetaDeg
+  std::map<G4double, G4int> mapAngle; // Z
+  std::map<G4double, std::map<G4double, G4int>> mapEnergy; // Z, thetaDeg
 
   #include "Binning.hh"
 
 };
 
 #endif
-
-
-
