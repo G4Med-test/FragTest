@@ -1,7 +1,6 @@
 #include "AnalysisManager.hh"
-#include "TFile.h"
-#include "TNtuple.h"
-#include "TH1D.h"
+#include "G4AnalysisManager.hh"
+#include "G4Exception.hh"
 
 #include <fstream> 
 #include <sstream>
@@ -10,7 +9,7 @@ using namespace std;
 
 AnalysisManager* AnalysisManager::instance = nullptr;
 
-AnalysisManager::AnalysisManager() : pThickness(600.), outputFile(nullptr)
+AnalysisManager::AnalysisManager() : pThickness(600.), booked(false), fFragmZ(-1), fBraggTot(-1)
 {}
 
 AnalysisManager::~AnalysisManager() 
@@ -24,70 +23,95 @@ AnalysisManager* AnalysisManager::getInstance()
 
 void AnalysisManager::RegisterOutputFile(G4double thick)
 {
+  if (booked && thick != pThickness)
+  {
+    G4Exception("AnalysisManager::RegisterOutputFile", "FragTest001", FatalException,
+                "The phantom thickness cannot change after the histograms are booked.");
+  }
+  if (ANGLE_EXP_POINTS.find(thick) == ANGLE_EXP_POINTS.end())
+  {
+    std::ostringstream msg;
+    msg << "Phantom thickness " << thick << " mm has no experimental binning; use one of:";
+    for (const auto& it_t: ANGLE_EXP_POINTS) { msg << " " << it_t.first; }
+    msg << " mm (/FragTest/phantomThickness).";
+    G4Exception("AnalysisManager::RegisterOutputFile", "FragTest002", FatalException, msg.str().c_str());
+  }
+
   pThickness = thick;
 
-  outputFile = new TFile("output.root", "RECREATE");
+  auto g4analysis = G4AnalysisManager::Instance();
+  g4analysis->SetDefaultFileType("root");
+  g4analysis->SetVerboseLevel(1);
 
-  fragNtuple = new TNtuple("ntuple101", "frag","AA:ZZ:xPos:phanThickness:zPos:KE:Gtime:thetaDeg");
-  
-  G4int nDbpBins = 3000;
-  G4int nZBins = 5;
-  std::ostringstream name, title;
-  
-  name << "hist_z_thick_" << (int) thick;
-  title << "Fragment Z for thickness=" << (int) thick;
-
-  fBraggTot = new TH1D("h10", "BraggTot", nDbpBins, 0., pThickness);
-  fFragmZ   = new TH1D(name.str().c_str(), title.str().c_str(), nZBins, 0.5, (G4double)nZBins + 0.5);
-
-  for (auto it_z: ANGLE_EXP_POINTS.at(thick))
+  if (!booked)
   {
-    std::ostringstream hname, htitle;
-    hname << "hist_theta_thick_" << (int) thick << "_z_" << (int) it_z.first;
-    htitle << "Fragment theta for thickness="<< (int) thick << " and Z=" << (int) it_z.first;
-    
-    mapAngle[it_z.first] = new TH1D(hname.str().c_str(), htitle.str().c_str(), 
-                                    it_z.second.size() / 2, -0.5, (G4double)(it_z.second.size() / 2) - 0.5);
-  }
+    G4int nDbpBins = 3000;
+    G4int nZBins = 5;
+    std::ostringstream name, title;
 
-  for (auto it_z: ENERGY_EXP_POINTS.at(thick))
-  {
-    for (auto it_a: it_z.second)
+    name << "hist_z_thick_" << (int) thick;
+    title << "Fragment Z for thickness=" << (int) thick;
+
+    fBraggTot = g4analysis->CreateH1("h10", "BraggTot", nDbpBins, 0., pThickness);
+    fFragmZ   = g4analysis->CreateH1(name.str(), title.str(), nZBins, 0.5, (G4double)nZBins + 0.5);
+
+    for (auto it_z: ANGLE_EXP_POINTS.at(thick))
     {
       std::ostringstream hname, htitle;
-      hname << "hist_energy_thick_" << (int) thick << "_z_" << (int) it_z.first << "_theta_" << (int) it_a.first;
-      htitle << "Fragment energy for thickness="<< (int) thick << " and Z=" << (int) it_z.first;
-      htitle << " and abs(theta)=" << (int) it_a.first;
-      
-      mapEnergy[it_z.first][it_a.first] = new TH1D(hname.str().c_str(), htitle.str().c_str(), 
-                                                   it_a.second.size()-1, &(it_a.second.at(0)));
+      hname << "hist_theta_thick_" << (int) thick << "_z_" << (int) it_z.first;
+      htitle << "Fragment theta for thickness="<< (int) thick << " and Z=" << (int) it_z.first;
+
+      mapAngle[it_z.first] = g4analysis->CreateH1(hname.str(), htitle.str(),
+                                                  it_z.second.size() / 2, -0.5, (G4double)(it_z.second.size() / 2) - 0.5);
     }
+
+    for (auto it_z: ENERGY_EXP_POINTS.at(thick))
+    {
+      for (auto it_a: it_z.second)
+      {
+        std::ostringstream hname, htitle;
+        hname << "hist_energy_thick_" << (int) thick << "_z_" << (int) it_z.first << "_theta_" << (int) it_a.first;
+        htitle << "Fragment energy for thickness="<< (int) thick << " and Z=" << (int) it_z.first;
+        htitle << " and abs(theta)=" << (int) it_a.first;
+
+        mapEnergy[it_z.first][it_a.first] = g4analysis->CreateH1(hname.str(), htitle.str(), it_a.second);
+      }
+    }
+    booked = true;
   }
+
+  g4analysis->OpenFile("output.root");
 }
 
 //////////////////////////////////////////////
 
 void AnalysisManager::FillZ(G4double Z)
 {
-  fFragmZ->Fill(Z, 1.0);
+  G4AnalysisManager::Instance()->FillH1(fFragmZ, Z, 1.0);
 }
 
 //////////////////////////////////////////////
 
 void AnalysisManager::Finish() 
 {   
-  fFragmZ->Print("all");
-  if(outputFile) { 
-    outputFile->Write(); 
-    outputFile->Close(); 
-  } 
+  auto g4analysis = G4AnalysisManager::Instance();
+  if (!g4analysis->IsOpenFile()) { return; }
+
+  auto hZ = g4analysis->GetH1(fFragmZ);
+  for (G4int ib = 0; ib < (G4int) hZ->axis().bins(); ++ib)
+  {
+    G4cout << "Fragments Z=" << ib + 1 << ": " << hZ->bin_entries(ib) << G4endl;
+  }
+
+  g4analysis->Write();
+  g4analysis->CloseFile();
 }
 
 //////////////////////////////////////////////
 
 void AnalysisManager::FillBraggTot(G4double disY, G4double edep)
 {
-  fBraggTot->Fill(disY, edep);
+  G4AnalysisManager::Instance()->FillH1(fBraggTot, disY, edep);
 }
 
 ///////////////////////////////////////////////
@@ -126,7 +150,7 @@ void AnalysisManager::FillAngle(G4double Z, G4double thetaDeg)
   {
     if ((thetaDeg >= ANGLE_EXP_POINTS.at(pThickness).at(Z).at(ia)) && (thetaDeg <= ANGLE_EXP_POINTS.at(pThickness).at(Z).at(ia+1)))
     {
-      mapAngle[Z]->Fill(ia/2);
+      G4AnalysisManager::Instance()->FillH1(mapAngle[Z], ia/2);
     }
   }
 }
@@ -143,7 +167,7 @@ void AnalysisManager::FillEnergy(G4double Z, G4double thetaDeg, G4double en)
     theta_bin = it_a.first;
     if ((thetaDeg >= theta_bin - angleWidth) && (thetaDeg <= theta_bin + angleWidth))
     {      
-        mapEnergy[Z][theta_bin]->Fill(en);
+        G4AnalysisManager::Instance()->FillH1(mapEnergy[Z][theta_bin], en);
         return;
     }
   }

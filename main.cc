@@ -7,7 +7,6 @@
 #include "SteppingAction.hh"
 #include "EventAction.hh"
 
-#include "AnalysisManager.hh"
 #include "Randomize.hh"
 
 #include "G4UImanager.hh"
@@ -28,17 +27,13 @@ int main(int argc, char** argv)
     G4cout << "***********************" << G4endl;
   }
 
-  G4double y = (argc > 3) ? atof(argv[3])*CLHEP::mm : 30*CLHEP::cm;
+  // Phantom thickness: set it with /FragTest/phantomThickness before
+  // /run/initialize; the optional third argument only changes the default.
+  G4double y = (argc > 3) ? atof(argv[3])*CLHEP::mm : 288*CLHEP::mm;
   DetectorConstruction* detector = new DetectorConstruction(y);
 
   G4RunManager* rm = new G4RunManager();
   rm->SetUserInitialization(detector);
-
-  // Instantiate the analysis manager
-  AnalysisManager* analysis = AnalysisManager::getInstance();
-
-  // Create ROOT file, histograms and ntuple
-  analysis->RegisterOutputFile(y);
 
   G4VUserPhysicsList* physics = new PhysicsList();
   rm->SetUserInitialization(physics);
@@ -46,13 +41,13 @@ int main(int argc, char** argv)
   G4VUserPrimaryGeneratorAction* pga = new PrimaryGeneratorAction();
   rm->SetUserAction(pga);
 
-  G4UserRunAction* ra = new RunAction();
+  G4UserRunAction* ra = new RunAction(detector);
   rm->SetUserAction(ra);
 
   EventAction* event = new EventAction();
   rm->SetUserAction(event);
 
-  rm->SetUserAction(new SteppingAction(event, y));
+  rm->SetUserAction(new SteppingAction(event, detector));
 
   //initialize visualization
   G4VisManager* visManager = nullptr;
@@ -72,7 +67,6 @@ int main(int argc, char** argv)
     G4String fileName = argv[1];
     UImanager->ApplyCommand(command+fileName);
   }
-  analysis->Finish();
 
   //job termination
   delete visManager;

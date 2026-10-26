@@ -9,9 +9,14 @@ QGSP_BIC_HP_EMY) for fragment yields against Haettner et al.
 ## 🔬 What this test does
 
 A 400 MeV/u carbon-12 beam is shot into a water column; the fragment
-yield/charge distribution is scored at several water depths (59-347 mm,
-spanning the Bragg peak region) and compared across hadronic physics models
-(`FragTestExp.py` holds the experimental reference data).
+yield/charge, angular and energy distributions are scored behind the water
+for one depth per run (59-347 mm, spanning the Bragg peak region, set with
+`/FragTest/phantomThickness <T> mm` before `/run/initialize`) and compared
+across hadronic physics models (`FragTestExp.py` holds the experimental
+reference data).
+
+Histograms are written to `output.root` with Geant4's own analysis manager:
+no ROOT installation is needed to build or run the test.
 
 ## 📚 Reference
 
@@ -32,8 +37,8 @@ measures fragment distributions at 400 MeV/u.
 - `macro/` contains the 8 macros found directly in that source tree (kept
   for reference, not used by CI — none of the 3 `run*MeV.mac` ones are
   self-contained, and one even `/control/execute`s a file,
-  `run400MeV.mac`, that doesn't exist in the repository), plus one
-  concrete, self-contained macro built from `geant-config-generator`'s real
+  `run400MeV.mac`, that doesn't exist in the repository), plus seven
+  concrete, self-contained macros (one per water depth) built from `geant-config-generator`'s real
   `template.conf` — see `validation/README.md`.
 - `validation/parser.py` was **rewritten** for the `metadata()`/`parse()`
   module API that `ci-workflows/validation/export.py` actually calls (the
@@ -45,7 +50,6 @@ measures fragment distributions at 400 MeV/u.
   (`from FragTestExp import ...`, same pattern as `LowEFrag`'s
   `LowEFragExp`) rather than the original's package-relative
   `from . import FragTestExp`. See `validation/README.md` for details,
-  including why — unlike every other test in this import batch — no
-  analysis had to be restructured into single-point records despite the
-  move to one-macro-one-run. The vendored `gts` package is no longer needed
+  including why the yield-vs-thickness curve is exported as
+  single-point records (one macro per depth). The vendored `gts` package is no longer needed
   and was removed.

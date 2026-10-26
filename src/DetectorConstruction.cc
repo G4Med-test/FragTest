@@ -1,5 +1,6 @@
 #include "SteppingAction.hh"
 #include "DetectorConstruction.hh"
+#include "DetectorMessenger.hh"
 
 #include "globals.hh"
 #include "G4Element.hh"
@@ -43,13 +44,16 @@ DetectorConstruction::DetectorConstruction(G4double fooPhantomThickness)
   physicalWorld = nullptr;
   physicalPhantom = nullptr;
   phantomThickness = fooPhantomThickness;
+  messenger = new DetectorMessenger(this);
 }
 
 DetectorConstruction::DetectorConstruction():DetectorConstruction(60*CLHEP::cm)
 {}
 
 DetectorConstruction::~DetectorConstruction()
-{}
+{
+  delete messenger;
+}
 
 G4VPhysicalVolume* DetectorConstruction::Construct()
 {

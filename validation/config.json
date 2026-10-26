@@ -1,5 +1,11 @@
 {
   "macros": [
-    "QGSP_BIC_EMY_400MeV.mac"
+    "QGSP_BIC_EMY_400MeV_59mm.mac",
+    "QGSP_BIC_EMY_400MeV_159mm.mac",
+    "QGSP_BIC_EMY_400MeV_258mm.mac",
+    "QGSP_BIC_EMY_400MeV_279mm.mac",
+    "QGSP_BIC_EMY_400MeV_288mm.mac",
+    "QGSP_BIC_EMY_400MeV_312mm.mac",
+    "QGSP_BIC_EMY_400MeV_347mm.mac"
   ]
 }

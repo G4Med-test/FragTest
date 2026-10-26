@@ -13,18 +13,19 @@
 #include "G4PhysicalConstants.hh"
 
 #include "AnalysisManager.hh"
+#include "DetectorConstruction.hh"
 
-#include "TMath.h"
+#include <cmath>
 
 #include "Randomize.hh"
 
 using namespace std;
 
 SteppingAction::SteppingAction(EventAction* eventActionPointer, 
-			       G4double phanThickness)
+			       DetectorConstruction* det)
   :event(eventActionPointer),
    analysis(AnalysisManager::getInstance()),
-   phantomThickness(phanThickness)
+   detector(det)
 {}
 
 SteppingAction::~SteppingAction()
@@ -45,9 +46,9 @@ void SteppingAction::UserSteppingAction(const G4Step* aStep)
       G4double disY = aStep->GetTrack()->GetPosition().y() / mm;
       G4double disZ = aStep->GetTrack()->GetPosition().z() / mm;
       //G4double KE = aStep->GetTrack()-> GetKineticEnergy()/MeV;
-      G4double asin_value = TMath::Min(TMath::Sqrt(disX*disX + disZ*disZ) / 2940.0, 1.0);      
-      G4double thetaDeg = TMath::RadToDeg() * TMath::ASin(asin_value);      
-      G4double thetaDegSigned = (disX / TMath::Abs(disX)) * thetaDeg;
+      G4double asin_value = std::min(std::sqrt(disX*disX + disZ*disZ) / 2940.0, 1.0);      
+      G4double thetaDeg = std::asin(asin_value) / deg;      
+      G4double thetaDegSigned = (disX / std::abs(disX)) * thetaDeg;
       if(A > 0 && pdgZ > 0. && pdgZ <= 5. && postVol->GetName() == "physRecVol" && thetaDeg < 10.4) {
         //G4cout << "--- Z= " << Z << "  A= " << A << G4endl;
 	      G4double globalTime = aStep->GetTrack()->GetGlobalTime()/ns;
@@ -72,7 +73,7 @@ void SteppingAction::UserSteppingAction(const G4Step* aStep)
         }
         else
         {
-          G4double energyPerNuc = (1. / TMath::Sqrt(1 - pow(beta, 2)) - 1) * restMasses[Z - 1];
+          G4double energyPerNuc = (1. / std::sqrt(1 - pow(beta, 2)) - 1) * restMasses[Z - 1];
           analysis->FillEnergy(pdgZ, thetaDeg, energyPerNuc);
         }
       }
@@ -83,7 +84,7 @@ void SteppingAction::UserSteppingAction(const G4Step* aStep)
     } else if(preVol->GetName() == "physcialPhantom") {
       analysis->FillBraggTot(0.5*(aStep->GetPreStepPoint()->GetPosition().y() 
 				  + aStep->GetPostStepPoint()->GetPosition().y() 
-				  - phantomThickness), 
+				  - detector->GetPhantomThickness()), 
 			     aStep->GetTotalEnergyDeposit());
     }
   }
