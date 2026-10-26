@@ -8,14 +8,10 @@
 # (gts.BaseParser + PyROOT, merging repeated-seed job groups) to the
 # module-level metadata()/parse() API expected by
 # ci-workflows/validation/export.py, reading ROOT with uproot (no PyROOT on
-# the runner). `THICKNESS` is not actually a macro-configurable parameter —
-# geant-config-generator's own template.conf never substitutes it, so every
-# run already scores all 7 water depths from params.conf (`!THICKNESS=59,
-# 159, 258, 279, 288, 312, 347`) into one output.root; the only thing that
-# genuinely varies between macros is the hadronic physics MODEL. There is
-# therefore no job-group merge needed at all: every chart the original
-# built from a (MODEL, all-THICKNESS) job group is still fully computable
-# from a single macro/run.
+# the runner). The water thickness is a geometry parameter: each macro sets
+# it with /FragTest/phantomThickness and its output.root only holds the
+# histograms of that depth, so the yield-vs-thickness curve is exported as
+# one single-point chart per macro (see README.md).
 import math
 import os
 
@@ -25,12 +21,25 @@ from FragTestExp import exp as EXP_YIELD, ANGLE_EXP_POINTS, ENERGY_EXP_POINTS
 THICKNESSES = (59, 159, 258, 279, 288, 312, 347)
 Z_ELEMENTS = (1, 2, 3, 4, 5)
 DET_ANGLE_WIDTH = math.atan(20. / 2940.)
+LENGTH_UNITS_MM = {"um": 1e-3, "mm": 1., "cm": 10., "m": 1e3}
+
+
+def length_mm(value):
+    """Convert a Geant4 length argument such as '288 mm' to mm."""
+    parts = value.split()
+    number, unit = (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "mm")
+    return float(number) * LENGTH_UNITS_MM[unit]
 
 
 def metadata(commands):
     nevents = single_run(commands)
+    thickness = length_mm(one_command(commands, "/FragTest/phantomThickness"))
+    matches = [t for t in THICKNESSES if abs(t - thickness) < 1e-6]
+    if not matches:
+        raise ValueError("/FragTest/phantomThickness %g mm is not one of %s mm" % (thickness, THICKNESSES))
     return {"TEST": "FragTest",
             "MODEL": one_command(commands, "/physics/addPhysics"),
+            "THICKNESS": matches[0],
             "NEVENTS": nevents}
 
 
@@ -54,21 +63,21 @@ def bin_content(hist, value):
     return float(values[ib]), width
 
 
-def get_yield_by_z(root, ntotal):
+def get_yield_by_z(root, thickness, ntotal):
+    hist = root["hist_z_thick_%d" % thickness]
     result = {}
-    for thickness in THICKNESSES:
-        hist = root["hist_z_thick_%d" % thickness]
-        result[thickness] = {}
-        for z in Z_ELEMENTS:
-            content = bin_content(hist, z)
-            if content is None:
-                continue
-            result[thickness][z] = content[0] / float(ntotal)
+    for z in Z_ELEMENTS:
+        content = bin_content(hist, z)
+        if content is None:
+            continue
+        result[z] = content[0] / float(ntotal)
     return result
 
 
 def normalize_factor(yield_by_z, z, thickness):
-    return EXP_YIELD[z][thickness] / yield_by_z[thickness][z]
+    if yield_by_z[z] == 0:
+        return 0.
+    return EXP_YIELD[z][thickness] / yield_by_z[z]
 
 
 def get_angular_distribution(root, thickness, z, ntotal):
@@ -115,67 +124,58 @@ def parse(job):
     import uproot
 
     ntotal = float(job["NEVENTS"])
+    thickness = job["THICKNESS"]
     filename = os.path.join(job["path"], "output.root")
     with uproot.open(filename) as root:
-        yield_by_z = get_yield_by_z(root, ntotal)
-
-        for thickness in THICKNESSES:
-            for z in Z_ELEMENTS:
-                if z not in yield_by_z.get(thickness, {}):
-                    continue
-                for angle in ENERGY_EXP_POINTS.get(thickness, {}).get(z, {}):
-                    values = get_energy_distribution(root, thickness, z, angle, ntotal)
-                    if not values:
-                        continue
-                    xval = [v[0] for v in values]
-                    yval = [v[1] for v in values]
-                    yerr = [v[2] for v in values]
-                    factor = normalize_factor(yield_by_z, z, thickness)
-                    parameters = [{"names": "Z", "values": str(z)},
-                                  {"names": "thickness", "values": "%s mm" % thickness},
-                                  {"names": "angle", "values": str(angle)}]
-                    yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
-                                  observableName="energy distribution", targetName="water",
-                                  beamParticle="C12", beamEnergies=[400], parameters=parameters,
-                                  title="energy distribution", xAxisName="Energy, MeV",
-                                  yAxisName="(N/N_{0})(#Omega*MeV)^{-1}",
-                                  xValues=xval, yValues=yval, yStatErrorsPlus=yerr, yStatErrorsMinus=yerr)
-                    yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
-                                  observableName="energy distribution (scaled to exp. yield)", targetName="water",
-                                  beamParticle="C12", beamEnergies=[400], parameters=parameters,
-                                  title="energy distribution", xAxisName="Energy, MeV",
-                                  yAxisName="(N/N_{0})(#Omega*MeV)^{-1}",
-                                  xValues=xval, yValues=[y * factor for y in yval],
-                                  yStatErrorsPlus=[e * factor for e in yerr],
-                                  yStatErrorsMinus=[e * factor for e in yerr])
+        yield_by_z = get_yield_by_z(root, thickness, ntotal)
 
         for z in Z_ELEMENTS:
-            xvalues, yvalues, yerr = [], [], []
-            for thickness in THICKNESSES:
-                if z not in yield_by_z.get(thickness, {}):
-                    continue
-                y = yield_by_z[thickness][z]
-                xvalues.append(thickness)
-                yvalues.append(y)
-                yerr.append(math.sqrt(y * ntotal) / ntotal)
-            if not xvalues:
+            if z not in yield_by_z:
                 continue
+            for angle in ENERGY_EXP_POINTS.get(thickness, {}).get(z, {}):
+                values = get_energy_distribution(root, thickness, z, angle, ntotal)
+                if not values:
+                    continue
+                xval = [v[0] for v in values]
+                yval = [v[1] for v in values]
+                yerr = [v[2] for v in values]
+                factor = normalize_factor(yield_by_z, z, thickness)
+                parameters = [{"names": "Z", "values": str(z)},
+                              {"names": "thickness", "values": "%s mm" % thickness},
+                              {"names": "angle", "values": str(angle)}]
+                yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
+                              observableName="energy distribution", targetName="water",
+                              beamParticle="C12", beamEnergies=[400], parameters=parameters,
+                              title="energy distribution", xAxisName="Energy, MeV",
+                              yAxisName="(N/N_{0})(#Omega*MeV)^{-1}",
+                              xValues=xval, yValues=yval, yStatErrorsPlus=yerr, yStatErrorsMinus=yerr)
+                yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
+                              observableName="energy distribution (scaled to exp. yield)", targetName="water",
+                              beamParticle="C12", beamEnergies=[400], parameters=parameters,
+                              title="energy distribution", xAxisName="Energy, MeV",
+                              yAxisName="(N/N_{0})(#Omega*MeV)^{-1}",
+                              xValues=xval, yValues=[y * factor for y in yval],
+                              yStatErrorsPlus=[e * factor for e in yerr],
+                              yStatErrorsMinus=[e * factor for e in yerr])
+
+        # One macro = one thickness: single-point chart per Z, combined across
+        # the macros by the portal into the yield-vs-thickness curve.
+        for z in Z_ELEMENTS:
+            if z not in yield_by_z:
+                continue
+            y = yield_by_z[z]
+            err = math.sqrt(y * ntotal) / ntotal
             yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
                           observableName="fragment yield", targetName="water",
                           beamParticle="C12", beamEnergies=[400],
                           parameters=[{"names": "Z", "values": str(z)}],
                           title="fragment yield", xAxisName="thickness of water, mm", yAxisName="N/N_{0}",
-                          xValues=xvalues, yValues=yvalues, yStatErrorsPlus=yerr, yStatErrorsMinus=yerr)
+                          xValues=[thickness], yValues=[y], yStatErrorsPlus=[err], yStatErrorsMinus=[err])
 
-        for thickness in THICKNESSES:
-            if thickness not in yield_by_z:
-                continue
-            xvalues, yvalues, yerr = [], [], []
-            for z in sorted(yield_by_z[thickness]):
-                y = yield_by_z[thickness][z]
-                xvalues.append(z)
-                yvalues.append(y)
-                yerr.append(math.sqrt(y * ntotal) / ntotal)
+        xvalues = sorted(yield_by_z)
+        yvalues = [yield_by_z[z] for z in xvalues]
+        yerr = [math.sqrt(y * ntotal) / ntotal for y in yvalues]
+        if xvalues:
             yield getJSON(job, "histogram", mctool_name="GEANT4", mctool_model=job["MODEL"],
                           observableName="fragment yield by Z", targetName="water",
                           beamParticle="C12", beamEnergies=[400],
@@ -184,29 +184,28 @@ def parse(job):
                           binEdgeLow=[x - 0.5 for x in xvalues], binEdgeHigh=[x + 0.5 for x in xvalues],
                           binContent=yvalues, yStatErrorsPlus=yerr, yStatErrorsMinus=yerr)
 
-        for thickness in THICKNESSES:
-            for z in yield_by_z.get(thickness, {}):
-                items = get_angular_distribution(root, thickness, z, ntotal)
-                if not items:
-                    continue
-                items.sort(key=lambda x: x[0])
-                xval = [v[0] for v in items]
-                yval = [v[1] for v in items]
-                yerr = [v[2] for v in items]
-                factor = normalize_factor(yield_by_z, z, thickness)
-                parameters = [{"names": "Z", "values": str(z)},
-                              {"names": "thickness", "values": "%s mm" % thickness}]
-                yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
-                              observableName="angular distribution", targetName="water",
-                              beamParticle="C12", beamEnergies=[400], parameters=parameters,
-                              title="angular distribution", xAxisName="angle, deg",
-                              yAxisName="(N/N_{0})#Omega^{-1}",
-                              xValues=xval, yValues=yval, yStatErrorsPlus=yerr, yStatErrorsMinus=yerr)
-                yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
-                              observableName="angular distribution (scaled to exp. yield)", targetName="water",
-                              beamParticle="C12", beamEnergies=[400], parameters=parameters,
-                              title="angular distribution", xAxisName="angle, deg",
-                              yAxisName="(N/N_{0})#Omega^{-1}",
-                              xValues=xval, yValues=[y * factor for y in yval],
-                              yStatErrorsPlus=[e * factor for e in yerr],
-                              yStatErrorsMinus=[e * factor for e in yerr])
+        for z in yield_by_z:
+            items = get_angular_distribution(root, thickness, z, ntotal)
+            if not items:
+                continue
+            items.sort(key=lambda x: x[0])
+            xval = [v[0] for v in items]
+            yval = [v[1] for v in items]
+            yerr = [v[2] for v in items]
+            factor = normalize_factor(yield_by_z, z, thickness)
+            parameters = [{"names": "Z", "values": str(z)},
+                          {"names": "thickness", "values": "%s mm" % thickness}]
+            yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
+                          observableName="angular distribution", targetName="water",
+                          beamParticle="C12", beamEnergies=[400], parameters=parameters,
+                          title="angular distribution", xAxisName="angle, deg",
+                          yAxisName="(N/N_{0})#Omega^{-1}",
+                          xValues=xval, yValues=yval, yStatErrorsPlus=yerr, yStatErrorsMinus=yerr)
+            yield getJSON(job, "chart", mctool_name="GEANT4", mctool_model=job["MODEL"],
+                          observableName="angular distribution (scaled to exp. yield)", targetName="water",
+                          beamParticle="C12", beamEnergies=[400], parameters=parameters,
+                          title="angular distribution", xAxisName="angle, deg",
+                          yAxisName="(N/N_{0})#Omega^{-1}",
+                          xValues=xval, yValues=[y * factor for y in yval],
+                          yStatErrorsPlus=[e * factor for e in yerr],
+                          yStatErrorsMinus=[e * factor for e in yerr])

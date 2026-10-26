@@ -1,4 +1,5 @@
 /physics/addPhysics QGSP_BIC_EMY
+/FragTest/phantomThickness 279 mm
 /run/initialize
 
 /control/verbose 0

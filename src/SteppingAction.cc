@@ -13,6 +13,7 @@
 #include "G4PhysicalConstants.hh"
 
 #include "AnalysisManager.hh"
+#include "DetectorConstruction.hh"
 
 #include <cmath>
 
@@ -21,10 +22,10 @@
 using namespace std;
 
 SteppingAction::SteppingAction(EventAction* eventActionPointer, 
-			       G4double phanThickness)
+			       DetectorConstruction* det)
   :event(eventActionPointer),
    analysis(AnalysisManager::getInstance()),
-   phantomThickness(phanThickness)
+   detector(det)
 {}
 
 SteppingAction::~SteppingAction()
@@ -83,7 +84,7 @@ void SteppingAction::UserSteppingAction(const G4Step* aStep)
     } else if(preVol->GetName() == "physcialPhantom") {
       analysis->FillBraggTot(0.5*(aStep->GetPreStepPoint()->GetPosition().y() 
 				  + aStep->GetPostStepPoint()->GetPosition().y() 
-				  - phantomThickness), 
+				  - detector->GetPhantomThickness()), 
 			     aStep->GetTotalEnergyDeposit());
     }
   }

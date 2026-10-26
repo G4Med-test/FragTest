@@ -33,7 +33,7 @@ void AnalysisManager::RegisterOutputFile(G4double thick)
     std::ostringstream msg;
     msg << "Phantom thickness " << thick << " mm has no experimental binning; use one of:";
     for (const auto& it_t: ANGLE_EXP_POINTS) { msg << " " << it_t.first; }
-    msg << " mm.";
+    msg << " mm (/FragTest/phantomThickness).";
     G4Exception("AnalysisManager::RegisterOutputFile", "FragTest002", FatalException, msg.str().c_str());
   }
 

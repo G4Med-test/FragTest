@@ -7,11 +7,12 @@
 class EventAction;
 class G4Step;
 class AnalysisManager;
+class DetectorConstruction;
 
 class SteppingAction : public G4UserSteppingAction
 {
 public:
-  SteppingAction(EventAction*, G4double phanThickness);
+  SteppingAction(EventAction*, DetectorConstruction*);
   ~SteppingAction();
 
   void UserSteppingAction(const G4Step* aStep);
@@ -19,7 +20,7 @@ public:
 private:
   EventAction* event;
   AnalysisManager* analysis;
-  G4double phantomThickness;
+  DetectorConstruction* detector;
 };
 #endif
 
