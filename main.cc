@@ -19,18 +19,10 @@ int main(int argc, char** argv)
   G4UIExecutive* ui = nullptr;
   if (argc == 1) { ui = new G4UIExecutive(argc,argv); }
 
-  if (argc > 2) {
-    G4int seed = atoi(argv[2]);
-    G4Random::setTheSeed(seed);
-    G4cout << "***********************" << G4endl;
-    G4cout << "*** " << seed << "  ***" << G4endl;
-    G4cout << "***********************" << G4endl;
-  }
-
-  // Phantom thickness: set it with /FragTest/phantomThickness before
-  // /run/initialize; the optional third argument only changes the default.
-  G4double y = (argc > 3) ? atof(argv[3])*CLHEP::mm : 288*CLHEP::mm;
-  DetectorConstruction* detector = new DetectorConstruction(y);
+  // All input parameters come from the macro: the phantom thickness with
+  // /FragTest/phantomThickness (before /run/initialize, default 288 mm) and,
+  // if needed, the random seed with /random/setSeeds.
+  DetectorConstruction* detector = new DetectorConstruction(288*CLHEP::mm);
 
   G4RunManager* rm = new G4RunManager();
   rm->SetUserInitialization(detector);
